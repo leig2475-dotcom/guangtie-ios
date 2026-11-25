@@ -1,0 +1,54 @@
+name: build-ipa
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build unsigned app
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Guangtie.xcodeproj \
+            -scheme Guangtie \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Guangtie.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            | tail -n 60
+
+      - name: Package ipa
+        run: |
+          APP=$(find ios/build/Guangtie.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -n 1)
+          echo "app: $APP"
+          mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          cd out
+          zip -qry "广铁一号.ipa" Payload
+          ls -lh "广铁一号.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guangtie-ipa
+          path: out/广铁一号.ipa
+          if-no-files-found: error
